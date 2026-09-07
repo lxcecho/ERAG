@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.knowledge</groupId>
+        <artifactId>knowledge-backend</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>knowledge-agent</artifactId>
+    <name>knowledge-agent</name>
+    <description>任务型 Agent 工作流引擎：基于 LangChain4j ChatModel 自研 Agent Engine，通过 Tool 桥接 RAG 层</description>
+
+    <dependencies>
+        <!--
+            依赖 AI 层：复用 SearchService / EmbeddingService / RetrievalResult（检索能力）；
+            传递依赖 knowledge-kb（DocPermissionService 文档权限）→ knowledge-auth → ... → common。
+        -->
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-ai</artifactId>
+        </dependency>
+
+        <!-- 显式依赖知识库层：KnowledgeSearchTool 需直接调用 DocPermissionService 做权限后过滤 -->
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-kb</artifactId>
+        </dependency>
+
+        <!--
+            Agent 层 LLM 调用基于 LangChain4j（dev.langchain4j.*），与 RAG 层共用
+            AiConfig 创建的 ChatModel Bean（OpenAI 兼容协议），支持 DeepSeek / 通义千问 / OpenAI 等。
+            结构化输出由 LangChain4j ChatModel + Jackson JSON 解析实现。
+        -->
+
+        <!--
+            邮件发送（v3-3 EmailTool 的 smtp 模式）：提供 JavaMailSender。
+            log 模式不依赖此 starter；smtp 模式按 agent.tool.email.* 配置真实发送。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
+        <!-- 测试：JUnit5 + Mockito -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

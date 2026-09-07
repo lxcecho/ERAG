@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.knowledge</groupId>
+        <artifactId>knowledge-backend</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>knowledge-system</artifactId>
+    <name>knowledge-system</name>
+    <description>系统管理层：用户/角色/菜单实体与数据访问</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-infra</artifactId>
+        </dependency>
+        <!-- AOP：操作日志切面 @Aspect 依赖 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+        <!-- OpenAPI 注解（@Tag/@Operation），供 SysOperLogController 等接口文档化 -->
+        <dependency>
+            <groupId>com.github.xiaoymin</groupId>
+            <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+        </dependency>
+    </dependencies>
+</project>

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.knowledge</groupId>
+        <artifactId>knowledge-backend</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>knowledge-common</artifactId>
+    <name>knowledge-common</name>
+    <description>通用层：统一返回结果、全局异常处理、全局配置</description>
+
+    <dependencies>
+        <!-- Web：提供 @RestControllerAdvice / WebMvcConfigurer / Jackson 等 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <!-- 参数校验 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <!-- Hutool 工具集 -->
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-all</artifactId>
+        </dependency>
+
+        <!-- TransmittableThreadLocal：解决线程池复用场景下 ThreadLocal 串租户问题 -->
+        <!-- 比 InheritableThreadLocal 更安全：@Async/docAsyncExecutor/operLogExecutor 都能正确传递/清理 -->
+        <!-- 版本由父 pom dependencyManagement 统一管理（${ttl.version}=2.14.5） -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>transmittable-thread-local</artifactId>
+        </dependency>
+        <!-- 本地缓存：可见文档集合缓存 / 权限位缓存 -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <!-- Spring Cloud Alibaba Sentinel：提供 @SentinelResource AOP + BlockException 体系 -->
+        <!-- 放在 common（各业务模块依赖根），一次引入即可在 ai/agent/auth/kb 等模块使用注解 -->
+        <!-- 版本由父 pom SCA BOM 统一管理（2025.0.0.0，内含 sentinel 1.8.9） -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+        </dependency>
+
+        <!-- Sentinel 本地规则数据源：FileRefreshableDataSource 加载 sentinel-rules.json 兜底规则 -->
+        <dependency>
+            <groupId>com.alibaba.csp</groupId>
+            <artifactId>sentinel-datasource-extension</artifactId>
+        </dependency>
+
+        <!-- Spring AMQP（RabbitMQ）：文档解析任务队列，提供 RabbitTemplate / @RabbitListener / RetryTemplate -->
+        <!-- 放在 common（各业务模块依赖根），kb 生产 + ai 消费均可用；版本由 Spring Boot 父 BOM 管理 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+
+        <!-- Spring Data Redis：全局缓存控件，提供 StringRedisTemplate / @Cacheable 注解支持 -->
+        <!-- 客户端默认 Lettuce（Netty 异步非阻塞），连接池需 commons-pool2；版本由 Spring Boot 父 BOM 管理 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- Lettuce 连接池依赖（spring-boot-starter-data-redis 不传递），无此依赖无法开启 pool.enabled -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+        </dependency>
+    </dependencies>
+</project>

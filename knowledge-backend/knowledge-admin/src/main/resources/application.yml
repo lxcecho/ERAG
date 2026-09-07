@@ -1,0 +1,505 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+  tomcat:
+    uri-encoding: UTF-8
+    max-threads: 200
+    accept-count: 100
+
+spring:
+  profiles:
+    active: dev
+  application:
+    name: knowledge-ai-assistant
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    default-property-inclusion: non_null
+  # Agent 层与 RAG 层统一使用 LangChain4j ChatModel（OpenAI 兼容协议），
+  # LLM 配置统一走 knowledge.ai.llm.base-url / api-key / model-name
+  # Spring Cloud Alibaba Sentinel（限流 / 熔断降级 / 控制台接入）
+  # 控制台未启动时，应用仍可用本地 sentinel-rules.json 兜底规则（见 SentinelRuleConfig）
+  cloud:
+    sentinel:
+      transport:
+        # Sentinel Dashboard 地址（默认本机 8858）；未启动 Dashboard 不影响应用启动
+        dashboard: ${SENTINEL_DASHBOARD:localhost:8858}
+        # 客户端与控制台通信端口（默认 8719，被占用自动+1）
+        port: ${SENTINEL_CLIENT_PORT:8719}
+      eager: true                       # 启动即初始化 Sentinel 并上报，不等首次访问
+      web-context-unify: false          # 链路不聚合，按 @SentinelResource 资源名精确限流
+      filter:
+        enabled: false                  # 关闭全局 Sentinel Web 过滤器，仅用注解 @SentinelResource 精确控制限流点
+      # 本地规则文件兜底（FileRefreshableDataSource 自动热刷新；Dashboard 推送优先覆盖）
+      # Dashboard 不可用时，应用仍按此文件规则执行限流/熔断
+      datasource:
+        flow:
+          file:
+            file: classpath:sentinel-flow-rules.json
+            data-type: json
+            rule-type: flow
+        degrade:
+          file:
+            file: classpath:sentinel-degrade-rules.json
+            data-type: json
+            rule-type: degrade
+
+  # Redis 全局缓存（降级开关：spring.cache.type=none 时跳过 RedisCacheManager/CacheService 装配）
+  # 客户端默认 Lettuce（Netty 异步非阻塞），连接池需 commons-pool2
+  cache:
+    type: ${SPRING_CACHE_TYPE:redis}        # redis / none；开发环境无 Redis 设 none 直通；docker 部署用 redis
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+      timeout: 3000ms
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 16
+          max-idle: 8
+          min-idle: 4
+          max-wait: 3000ms
+
+  # RabbitMQ（文档解析任务队列：消息重试/死信队列/消费幂等/任务补偿）
+  # 降级：kb.parse.mq.enabled=false 时不装配消费者/配置，CachingConnectionFactory lazy 不连接，回退 @Async 事件
+  # 默认账号对齐 docker-compose（erag/erag123）；若本机另起 RabbitMQ 可用环境变量覆盖
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:erag}
+    password: ${RABBITMQ_PASSWORD:erag123}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    connection-timeout: 5000
+    listener:
+      simple:
+        acknowledge-mode: auto          # 由 RetryTemplate 处理重试，成功自动 ack
+        prefetch: 2                     # 文档解析耗时，低 prefetch 避免堆积
+        concurrency: 2
+        max-concurrency: 4
+        retry:
+          enabled: true                 # 启用 Spring AMQP RetryTemplate（消息重试）
+          max-attempts: ${KB_PARSE_MQ_MAX_RETRIES:5}  # 含首次共 5 次（本地 Ollama 较慢，适当增加）
+          initial-interval: 15000       # 首次重试 15s（本地模型需要更多缓冲时间）
+          multiplier: 2.0               # 退避倍数：15s→30s→60s→120s
+          max-interval: 120000
+          default-requeue-rejected: false  # 重试耗尽不回原队列，由 RepublishMessageRecoverer 投 DLQ
+
+# MyBatis-Plus
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: assign_id
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# JWT 认证配置
+jwt:
+  # 签名密钥（HS256，UTF-8 字节需 >= 32）；生产环境务必更换并通过环境变量 JWT_SECRET 注入
+  secret: ${JWT_SECRET:knowledge-ai-assistant-jwt-secret-key-2026}
+  # access token 有效期（秒），默认 7200 = 2 小时
+  access-token-expire: 7200
+  # 请求头名称
+  header: Authorization
+  # token 前缀
+  prefix: "Bearer "
+  # 允许从 query 参数读取 token 的路径白名单（SSE 端点：EventSource 无法设自定义请求头）
+  allow-query-token-paths: [/ai/stream]
+
+# 知识库文件存储
+kb:
+  storage:
+    # 存储类型 local/minio，默认 local；docker 部署用 minio
+    type: ${KB_STORAGE_TYPE:local}
+    # 本地存储根目录（开发环境；生产建议挂载独立数据盘）
+    base-path: ${KB_STORAGE_PATH:./data/files}
+    # 允许上传的文件后缀
+    allowed-types: [pdf, doc, docx, md]
+    # 单文件大小上限（字节），默认 100MB
+    max-file-size: 104857600
+    # 静态资源访问前缀（预留下载接口使用）
+    url-prefix: /files
+    # MinIO 配置（type=minio 时生效）
+    minio:
+      endpoint: ${KB_STORAGE_MINIO_ENDPOINT:http://localhost:9000}
+      access-key: ${KB_STORAGE_MINIO_ACCESS_KEY:minioadmin}
+      secret-key: ${KB_STORAGE_MINIO_SECRET_KEY:minioadmin}
+      bucket: ${KB_STORAGE_MINIO_BUCKET:knowledge-files}
+  # 知识治理配置（文档去重 / 版本管理 / 有效期 / 审核 / 质量评分）
+  governance:
+    # 治理总开关：false 时跳过指纹/去重/评分埋点（降级为无治理）
+    enabled: ${KB_GOVERNANCE_ENABLED:true}
+    # 近似重复检测 SimHash Hamming 距离阈值（≤该值视为近似重复）
+    simhash-threshold: ${KB_GOVERNANCE_SIMHASH_THRESHOLD:3}
+    # 近似重复检测范围：true 仅同 KB 比对，false 全租户比对
+    duplicate-scope-kb-only: ${KB_GOVERNANCE_DUP_KB_ONLY:true}
+    # 检索门禁：true 时 RAG 检索排除未审核（PENDING/REJECTED）文档
+    review-gate: ${KB_GOVERNANCE_REVIEW_GATE:false}
+    # 检索门禁：true 时 RAG 检索排除已过期文档（expire_at < now）
+    expire-gate: ${KB_GOVERNANCE_EXPIRE_GATE:false}
+    # 定时任务开关：扫描过期文档自动驳回
+    schedule-enabled: ${KB_GOVERNANCE_SCHEDULE_ENABLED:true}
+    # 过期扫描 cron（默认每天凌晨 2 点）
+    expire-cron: "0 0 2 * * ?"
+  # 文档解析任务 MQ 配置（RabbitMQ：消息重试/死信队列/消费幂等/任务补偿）
+  parse:
+    mq:
+      # MQ 模式总开关：true=走 RabbitMQ，false=降级 @Async 事件（无需 RabbitMQ 也可启动）
+      enabled: ${KB_PARSE_MQ_ENABLED:true}
+      exchange: kb.parse.task
+      queue: kb.parse.task
+      routing-key: parse
+      dlx-exchange: kb.parse.task.dlx
+      dlq-queue: kb.parse.task.dlq
+      dlq-routing-key: dead
+      # 最大重试次数（与 spring.rabbitmq.listener.simple.retry.max-attempts 对齐）
+      # 本地 Ollama 模型较慢，建议 5+；在线 API 可设为 3
+      max-retries: ${KB_PARSE_MQ_MAX_RETRIES:5}
+      compensation:
+        # 补偿任务开关：定时扫描卡住/失败任务自动重投
+        enabled: ${KB_PARSE_COMPENSATION_ENABLED:true}
+        # 扫描 cron（默认每 5 分钟）
+        cron: "0 */5 * * * ?"
+        # PROCESSING 超过此分钟数视为卡住（进程崩溃/重启遗留）
+        stuck-threshold-minutes: 10
+
+# AI / RAG 配置（OpenAI 兼容协议，可对接 Ollama 本地 / DeepSeek / 通义千问 / OpenAI）
+ai:
+  # 文档解析器配置
+  parser:
+    # 解析器类型：tika（默认） | mineru（MinerU微服务）
+    type: ${AI_PARSER_TYPE:tika}
+    # MinerU服务配置（type=mineru 时生效）
+    mineru:
+      url: ${MINERU_URL:http://localhost:8000}
+      timeout: ${MINERU_TIMEOUT:120}
+      max-retries: ${MINERU_MAX_RETRIES:2}
+      fallback-to-tika: ${MINERU_FALLBACK_TIKA:true}
+  llm:
+    # 对话模型默认走本地 Ollama（deepseek-r1），无需外网与 API Key
+    base-url: ${LLM_BASE_URL:http://localhost:11434/v1}
+    api-key: ${LLM_API_KEY:ollama}
+    model-name: ${LLM_MODEL:deepseek-r1:latest}
+    temperature: 0.7
+    max-tokens: 2048
+    # 流式输出超时（秒），SSE 连接最长保持时间；deepseek-r1 本地推理思考较长，默认 600s
+    stream-timeout: ${LLM_STREAM_TIMEOUT:600}
+  embedding:
+    # 向量化默认走本地 Ollama（llama.cpp 封装）bge-m3：1024 维，与 Milvus collection 匹配，本地推理无费用；
+    # 切换后旧向量（由在线模型生成）向量空间不一致会失效，需对已有文档重新向量化；
+    # 如需切回在线 embedding，可设 EMBEDDING_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1 + EMBEDDING_API_KEY=xxx + EMBEDDING_MODEL=text-embedding-v3（同为 1024 维）
+    base-url: ${EMBEDDING_BASE_URL:http://localhost:11434/v1}
+    api-key: ${EMBEDDING_API_KEY:ollama}
+    model-name: ${EMBEDDING_MODEL:bge-m3}
+    # 向量维度，须与所用 Embedding 模型一致：bge-m3 / text-embedding-v3=1024，OpenAI text-embedding-3-small=1536
+    dimension: ${EMBEDDING_DIMENSION:1024}
+    # 批量向量化分批大小（默认 64，dashscope ≤25，OpenAI ≤2048，Ollama 无硬限制）
+    batch-size: ${AI_EMBEDDING_BATCH_SIZE:64}
+    # 单次 Embedding 请求超时（秒）：本地 Ollama CPU 较慢，默认 180s
+    timeout-seconds: ${AI_EMBEDDING_TIMEOUT:180}
+  milvus:
+    host: ${MILVUS_HOST:localhost}
+    port: ${MILVUS_PORT:19530}
+    collection-name: knowledge_chunks
+    # 须与 ai.embedding.dimension 一致，否则 Milvus collection 维度不匹配
+    dimension: ${EMBEDDING_DIMENSION:1024}
+  rag:
+    chunk-size: 800
+    chunk-overlap: 200
+    top-k: 5
+    min-score: 0.6
+    # 多轮对话历史窗口大小（最近 N 轮 = 2N 条消息）
+    history-window-size: ${RAG_HISTORY_WINDOW_SIZE:5}
+    # 是否启用 DB 模板（false 时使用内置默认模板）
+    use-db-template: ${RAG_USE_DB_TEMPLATE:false}
+    # 混合检索配置（ES BM25 + Milvus 向量 + RRF 融合 + Rerank）
+    hybrid:
+      enabled: ${HYBRID_ENABLED:false}        # 总开关，false 走纯向量（默认安全降级）
+      es-enabled: ${HYBRID_ES_ENABLED:true}   # ES 词法路开关
+      es-top-k: 20                            # ES BM25 召回路数
+      vector-top-k: 20                        # 向量召回路数
+      fusion:
+        type: rrf                             # 融合算法：倒数排名融合
+        rrf-k: 60                             # RRF 常数
+      rerank:
+        type: ${RERANK_TYPE:noop}             # 精排：noop 不精排 / http 外部 Cross-Encoder
+        top-n: 5
+        # 以下仅 type=http 时生效（SiliconFlow 兼容 /v1/rerank）
+        url: ${RERANK_URL:https://api.siliconflow.cn/v1/rerank}
+        api-key: ${RERANK_API_KEY:}
+        model: ${RERANK_MODEL:BAAI/bge-reranker-v2-m3}
+        timeout-ms: 5000
+    # RAG 优化流水线（5 阶段，均 best-effort，失败不阻断主流程）
+    # 默认策略：轻量阶段（压缩 + 规则评价）开，LLM 重型阶段（改写/扩展/多查询/LLM 评价）关
+    optimize:
+      rewrite:                                # 查询改写（LLM 指代消解 + 可选多查询）
+        enabled: ${RAG_OPT_REWRITE:false}
+        multi-query-enabled: ${RAG_OPT_REWRITE_MULTI:false}
+        max-sub-queries: 3
+        include-history: true
+      expansion:                              # 查询扩展（LLM 同义词，增强 BM25 召回）
+        enabled: ${RAG_OPT_EXPANSION:false}
+        max-terms: 5
+      compress:                               # 上下文压缩（去重 + char 预算截断）
+        enabled: ${RAG_OPT_COMPRESS:true}
+        max-context-chars: 6000
+        dedup-threshold: 0.8
+        llm-compress-enabled: ${RAG_OPT_COMPRESS_LLM:false}
+      eval:                                   # 回答评价（规则版 faithfulness/relevance）
+        enabled: ${RAG_OPT_EVAL:true}
+        llm-eval-enabled: ${RAG_OPT_EVAL_LLM:false}
+  # 模型计费配置（AI 调用日志费用估算，单位：元/1K tokens）
+  pricing:
+    default-input: 0.002
+    default-output: 0.006
+    models:
+      deepseek-r1:latest: { input: 0, output: 0 }   # 本地 Ollama 推理无费用
+      deepseek-chat: { input: 0.001, output: 0.002 }
+      qwen-plus: { input: 0.004, output: 0.012 }
+      qwen-max: { input: 0.02, output: 0.06 }
+      qwen-turbo: { input: 0.0005, output: 0.001 }
+      text-embedding-3-small: { input: 0.0005, output: 0 }
+  # 模型路由中心（多供应商路由 + 熔断 + failover；总开关 enabled=false 时不装配，零影响降级）
+  # 统一基于 OpenAI 兼容协议接入：OpenAI/DeepSeek/Ollama 原生支持，Gemini 走官方兼容端点，Claude 经兼容网关
+  model-router:
+    enabled: ${MODEL_ROUTER_ENABLED:false}     # 总开关：false 时 ModelRouter 不装配，调用方走原有 ChatModel 直连
+    default-strategy: tenant                   # 默认路由策略：name/cost/token/tenant
+    failover-retries: 1                        # 故障转移重试次数（选中供应商失败后最多再试 N 个候选）
+    providers:
+      openai:
+        enabled: ${OPENAI_ENABLED:false}
+        base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+        api-key: ${OPENAI_API_KEY:}
+        model-name: ${OPENAI_MODEL:gpt-4o-mini}
+        input-price: 0.00015                   # 元/1K tokens，供成本路由估算
+        output-price: 0.0006
+      deepseek:
+        enabled: ${DEEPSEEK_ENABLED:false}
+        base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com/v1}
+        api-key: ${DEEPSEEK_API_KEY:}
+        model-name: ${DEEPSEEK_MODEL:deepseek-chat}
+        input-price: 0.001
+        output-price: 0.002
+      claude:
+        enabled: ${CLAUDE_ENABLED:false}
+        base-url: ${CLAUDE_BASE_URL:https://api.anthropic.com/v1}
+        api-key: ${CLAUDE_API_KEY:}
+        model-name: ${CLAUDE_MODEL:claude-3-5-sonnet-latest}
+        input-price: 0.003
+        output-price: 0.015
+      gemini:
+        enabled: ${GEMINI_ENABLED:false}
+        base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta/openai}
+        api-key: ${GEMINI_API_KEY:}
+        model-name: ${GEMINI_MODEL:gemini-1.5-flash}
+        input-price: 0.000075
+        output-price: 0.0003
+      ollama:
+        enabled: ${OLLAMA_ENABLED:false}
+        base-url: ${OLLAMA_BASE_URL:http://localhost:11434/v1}
+        api-key: ollama                        # Ollama 不校验 key，任意非空占位即可
+        model-name: ${OLLAMA_MODEL:qwen2.5:7b}
+        input-price: 0                         # 本地推理无费用
+        output-price: 0
+    # 租户 → 偏好供应商映射（按租户路由使用）
+    tenant-preference:
+      1: deepseek
+      2: openai
+    # 熔断器（按供应商维度，达阈值熔断，冷却后半开试探；状态存 Redis 多节点共享，无 Redis 走内存）
+    circuit-breaker:
+      enabled: true
+      failure-threshold: 5                     # 窗口内失败次数阈值
+      window-seconds: 60                       # 失败计数统计窗口（秒）
+      open-seconds: 30                         # 熔断打开持续时间（秒）
+      half-open-permits: 1                     # 半开状态允许的试探请求数
+
+# Agent 工作流配置（任务型 Agent 引擎：Planner→Knowledge→Analysis→Report）
+agent:
+  # 单任务最大执行步数 / 工具调用次数 / token 预算封顶（防止资源耗尽）
+  max-steps: 12
+  max-tool-calls: 30
+  # KnowledgeAgent 每轮检索返回证据条数
+  search-top-k: 8
+  # 任务 wall-clock 超时（秒）
+  task-timeout-seconds: 300
+  retrieval:
+    over-fetch-multiplier: 4                 # 初召放大倍数（给权限 Post-Filter 留余量）
+    min-over-fetch: 20                       # 最小初召条数保底
+  # Tool Registry 配置（v3-3：工具超时/线程池/Email/Http/Sql）
+  tool:
+    default-timeout-ms: 60000                # 工具默认执行超时（毫秒），DB 元数据未配置时兜底
+    executor-pool-size: 8                    # 工具执行专用线程池大小
+    email:
+      mode: log                              # 发送模式 log=日志代替发送 / smtp=真实发送
+      from: no-reply@knowledge.ai
+      # smtp-host: smtp.example.com          # mode=smtp 时配置
+      # smtp-port: 465
+      # smtp-username: xxx
+      # smtp-password: xxx
+    http:
+      allowed-hosts:                         # SSRF 防护白名单（支持 glob，如 *.example.com / localhost）
+        - localhost
+        - 127.0.0.1
+      connect-timeout-ms: 5000
+      read-timeout-ms: 15000
+    sql:
+      allowed-tables:                        # SQL 查询表白名单（仅允许 SELECT 这些表）
+        - kb_document
+        - agent_task
+      max-rows: 1000                         # 返回行数上限
+      query-timeout-seconds: 10              # 单条查询超时
+
+# Agent 记忆中心配置（会话/摘要/长期事实/向量记忆 + 记忆衰减）
+memory:
+  conversation-window: 10                # 会话记忆窗口（最近 N 条消息）
+  summary-threshold: 10                  # 会话摘要触发阈值（轮次）
+  long-term-threshold: 10                # 长期事实抽取触发阈值（轮次）
+  recall-top-k: 5                        # 向量召回 Top K
+  vector-min-score: 0.6                  # 向量召回相似度下限
+  max-long-term-facts: 30                # 长期记忆衰减：最多加载条数
+  retention-days: 180                    # 长期记忆保留天数（0=永久）
+
+# Workflow 可控流程配置（声明式流程引擎：节点执行 + 状态保存 + 失败重试 + 人工审批）
+workflow:
+  task-timeout-seconds: 600                  # 单流程 wall-clock 超时（秒）
+  default-max-retries: 0                     # 节点默认自动重试上限（不含首次）
+  max-tokens-per-task: 80000                 # 单流程 token 预算封顶
+  system-tenant-id: 0                        # 预置流程注册的系统租户ID（全局模板）
+
+# Elasticsearch（混合检索词法路；与 ai.milvus 平级，独立连接配置）
+es:
+  uris: ${ES_URIS:http://localhost:9200}
+  username: ${ES_USERNAME:}
+  password: ${ES_PASSWORD:}
+  connect-timeout: 5s
+  socket-timeout: 30s
+  index-name: knowledge_chunks
+  enabled: ${ES_ENABLED:true}
+
+# 接口文档
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: default
+      paths-to-match: /**
+      packages-to-scan: com.knowledge
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+# 多租户配置（行级隔离 + 请求级上下文）
+tenant:
+  # 多租户总开关：true=全部业务SQL追加 AND tenant_id=?；false=关闭（方便单租户/演示环境）
+  enabled: ${TENANT_ENABLED:false}
+  default-tenant-code: demo
+  header-tenant-code: X-Tenant-Code
+  header-tenant-id: X-Tenant-Id
+  # MP 拦截器忽略的表（平台级，不加 tenant 条件）
+  ignore-tables:
+    - sys_tenant
+    - sys_tenant_menu
+    - sys_menu
+    # Prompt 三表中的版本/变量表无 tenant_id 列，由 template 表隔离，故忽略
+    - prompt_version
+    - prompt_variable
+  # Filter 忽略的路径（不要求租户上下文）
+  ignore-paths:
+    - /auth/login
+    - /auth/register
+    - /auth/captcha
+    - /actuator
+    - /doc.html
+    - /webjars
+    - /swagger-ui
+    - /v3/api-docs
+    - /favicon.ico
+
+# 日志
+logging:
+  config: classpath:logback-spring.xml
+  level:
+    root: info
+    com.knowledge: debug
+
+# Actuator 监控端点（全局监控 + 健康检查）
+# 端点位于 /api/actuator/**（受 server.servlet.context-path 影响）
+# 安全：SecurityConfig WHITELIST 已放行 /actuator/**（演示场景）；生产建议独立管理端口 management.server.port
+management:
+  endpoints:
+    web:
+      base-path: /actuator
+      exposure:
+        # 暴露：健康/信息/指标/Prometheus/环境/日志/Sentinel
+        include: health,info,metrics,prometheus,env,loggers,sentinel
+        exclude: shutdown,threaddump,heapdump   # 敏感端点不暴露
+  endpoint:
+    health:
+      show-details: when-authorized    # 未认证仅 status，认证后显示各组件详情
+      show-components: when-authorized
+      probes:
+        enabled: true                  # 启用 liveness/readiness 探针（K8s 友好）
+  health:
+    defaults:
+      enabled: true
+    elasticsearch:
+      enabled: false            # 禁用 Spring Boot 默认 ES 健康检查（改为自定义 ElasticsearchHealthIndicator，按 es.enabled 条件装配，避免 dev 未启 ES 拖垮整体健康状态）
+    redis:
+      enabled: true             # Redis 全局缓存已接入，启用健康检查
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true     # HTTP 请求直方图
+      percentiles:
+        http.server.requests: 0.5,0.9,0.95,0.99   # 关键分位数
+  info:
+    env:
+      enabled: true
+    java:
+      enabled: true
+    os:
+      enabled: true
+
+# 异常告警配置（AlertService：结构化 [ALERT] 日志 + 可选 Webhook）
+alert:
+  # 告警总开关：false 时 AlertService 不记录不推送
+  enabled: ${ALERT_ENABLED:true}
+  # Webhook 推送开关：true 且 webhook-url 非空时异步推送 Feishu/DingTalk 兼容接口
+  webhook-enabled: ${ALERT_WEBHOOK_ENABLED:false}
+  # Webhook 地址（Feishu/DingTalk 机器人；webhook-enabled=true 时生效）
+  webhook-url: ${ALERT_WEBHOOK_URL:}
+  # 同源同标题告警冷却时间（秒），避免告警风暴
+  cooldown-seconds: ${ALERT_COOLDOWN_SECONDS:60}
+  # 触发告警的最小级别（低于该级别不告警）：INFO < WARN < CRITICAL
+  min-level: WARN
+
+# AI 运维中心配置（v3-7：链路追踪 + 告警评估 + 预算）
+ops:
+  trace:
+    # 链路追踪总开关：false 时 TraceService 不记录（避免演示环境噪声）
+    enabled: ${OPS_TRACE_ENABLED:true}
+    # 采样率 [0,1]：演示环境默认全采
+    sample-rate: ${OPS_TRACE_SAMPLE_RATE:1.0}
+  alert:
+    # 告警规则评估定时任务 cron（默认每 5 分钟）
+    eval-cron: ${OPS_ALERT_EVAL_CRON:0 */5 * * * ?}
+    # 月度预算阈值（元）：当月累计费用超阈值触发 WARN 告警
+    monthly-budget: ${OPS_MONTHLY_BUDGET:100}

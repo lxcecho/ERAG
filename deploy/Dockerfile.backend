@@ -1,0 +1,18 @@
+# ===== 后端镜像：多阶段构建（Maven 构建 + JRE 运行） =====
+
+# 阶段1：构建
+FROM maven:3.9-eclipse-temurin-17 AS builder
+WORKDIR /build
+# 先拷贝全部源码（多模块），构建可执行 jar
+COPY knowledge-backend/ ./
+RUN mvn -B clean package -DskipTests
+
+# 阶段2：运行
+FROM eclipse-temurin:17-jre
+WORKDIR /app
+# 拷贝聚合模块产出的可执行 jar
+COPY --from=builder /build/knowledge-admin/target/knowledge-admin.jar app.jar
+# 时区
+ENV TZ=Asia/Shanghai
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]

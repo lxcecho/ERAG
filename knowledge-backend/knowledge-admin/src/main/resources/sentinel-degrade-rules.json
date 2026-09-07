@@ -1,0 +1,76 @@
+[
+  {
+    "resource": "llm:chat",
+    "limitApp": "default",
+    "grade": 0,
+    "count": 5000,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "slowRatioThreshold": 0.5,
+    "statIntervalMs": 10000
+  },
+  {
+    "resource": "llm:chat",
+    "limitApp": "default",
+    "grade": 2,
+    "count": 5,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 60000
+  },
+  {
+    "resource": "agent:llm:call",
+    "limitApp": "default",
+    "grade": 2,
+    "count": 5,
+    "timeWindow": 10,
+    "minRequestAmount": 3,
+    "statIntervalMs": 60000
+  },
+  {
+    "resource": "embedding:embed",
+    "limitApp": "default",
+    "grade": 2,
+    "count": 10,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 60000
+  },
+  {
+    "resource": "milvus:search",
+    "limitApp": "default",
+    "grade": 2,
+    "count": 10,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 60000
+  },
+  {
+    "resource": "mineru:parse",
+    "limitApp": "default",
+    "grade": 0,
+    "count": 10000,
+    "timeWindow": 30,
+    "minRequestAmount": 5,
+    "slowRatioThreshold": 0.6,
+    "statIntervalMs": 30000
+  },
+  {
+    "resource": "mineru:parse",
+    "limitApp": "default",
+    "grade": 1,
+    "count": 0.5,
+    "timeWindow": 30,
+    "minRequestAmount": 5,
+    "statIntervalMs": 30000
+  },
+  {
+    "resource": "mineru:parse",
+    "limitApp": "default",
+    "grade": 2,
+    "count": 5,
+    "timeWindow": 30,
+    "minRequestAmount": 5,
+    "statIntervalMs": 30000
+  }
+]

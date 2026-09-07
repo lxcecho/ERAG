@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.knowledge</groupId>
+        <artifactId>knowledge-backend</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>knowledge-kb</artifactId>
+    <name>knowledge-kb</name>
+    <description>知识库管理层：知识库 / 文档 / 上传记录 / 解析任务</description>
+
+    <dependencies>
+        <!--
+            依赖认证层：复用 SecurityUtils（获取当前用户）与 @PreAuthorize 注解；
+            传递依赖 knowledge-system → knowledge-infra → knowledge-common，
+            因而 MyBatis-Plus、Web、Validation、Hutool、Knife4j 注解均可用。
+        -->
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-auth</artifactId>
+        </dependency>
+        <!-- MinIO 对象存储（docker 部署用 minio，本地开发用 local） -->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+        </dependency>
+        <!-- 测试：JUnit5 + Mockito（知识治理算法单元测试） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

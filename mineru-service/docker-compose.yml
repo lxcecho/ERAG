@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  mineru:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: erag-mineru
+    ports:
+      - "8000:8000"
+    environment:
+      - MINERU_HOST=0.0.0.0
+      - MINERU_PORT=8000
+      - MINERU_LOG_LEVEL=INFO
+      - MINERU_TEMP_DIR=/tmp/mineru
+      - MINERU_MAX_FILE_SIZE_MB=100
+    volumes:
+      # 挂载临时目录（可选，用于调试）
+      - mineru-temp:/tmp/mineru
+    restart: unless-stopped
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+volumes:
+  mineru-temp:

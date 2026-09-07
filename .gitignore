@@ -1,0 +1,65 @@
+# ============================================================
+# ERAG .gitignore
+# ============================================================
+
+# ===== 内部开发文件（不随开源提交）=====
+.agent/
+.trae/
+docs/interview-prep.md
+
+# ===== 环境变量与密钥（.env 含 API Key，仅提交 .env.example 模板）=====
+deploy/.env
+*.env.local
+
+# ===== 部署数据卷与日志（运行时产物，不入库）=====
+deploy/data/
+deploy/logs/
+deploy/install.log
+deploy/deptree*.txt
+deploy/diag*.txt
+deploy/test-*.json
+deploy/test-doc.*
+deploy/test-ollama-embed.ps1
+
+# ===== Java / Maven =====
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+hs_err_pid*
+replay_pid*
+
+# ===== Node / Vue / 前端 =====
+node_modules/
+dist/
+dist-ssr/
+.npm
+.pnpm-store/
+*.local
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+.factorypath
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 其他 =====
+.cache/
+.temp/
+tmp/
+*.swp
+*.swo
+*~
+.claude

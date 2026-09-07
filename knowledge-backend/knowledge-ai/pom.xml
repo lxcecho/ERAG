@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.knowledge</groupId>
+        <artifactId>knowledge-backend</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>knowledge-ai</artifactId>
+    <name>knowledge-ai</name>
+    <description>AI 核心能力层：LangChain4j + Milvus 实现 RAG（解析/切片/Embedding/检索/问答）</description>
+
+    <dependencies>
+        <!--
+            依赖知识库层：读取文档文件、回写解析状态；
+            传递依赖 knowledge-auth → system → infra → common，获得 Web/Security/MyBatis-Plus 等。
+        -->
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-kb</artifactId>
+        </dependency>
+
+        <!-- LangChain4j 核心：Document / TextSegment / DocumentSplitter / ChatMessage 等 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j</artifactId>
+        </dependency>
+
+        <!-- OpenAI 兼容 LLM 与 Embedding（DeepSeek / 通义千问 / OpenAI 均走 OpenAI 协议） -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai</artifactId>
+        </dependency>
+
+        <!-- Milvus 向量存储 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-milvus</artifactId>
+        </dependency>
+
+        <!-- Apache Tika 文档解析（统一处理 PDF / Word / Markdown） -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-document-parser-apache-tika</artifactId>
+        </dependency>
+
+        <!-- Elasticsearch：混合检索的词法召回路（BM25），与 Milvus 向量路互补 -->
+        <!-- spring-boot-starter-data-elasticsearch 传递 elasticsearch-java 客户端与 rest-client -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
+        </dependency>
+
+        <!-- Actuator：提供 HealthIndicator 接口，供自定义健康检查（LLM/Milvus/ES）实现 -->
+        <!-- 运行时由 knowledge-admin 的 starter 装配端点；此处仅编译期依赖接口 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- 测试：JUnit5 + Mockito（混合检索单元测试） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

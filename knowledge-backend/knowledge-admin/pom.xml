@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.knowledge</groupId>
+        <artifactId>knowledge-backend</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>knowledge-admin</artifactId>
+    <packaging>jar</packaging>
+    <name>knowledge-admin</name>
+    <description>启动模块：聚合所有业务模块，包含启动类与主配置</description>
+
+    <dependencies>
+        <!-- 业务模块聚合（基础设施传递依赖通用层） -->
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-infra</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-common</artifactId>
+        </dependency>
+
+        <!-- 认证授权模块（传递依赖 knowledge-system → knowledge-infra） -->
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-auth</artifactId>
+        </dependency>
+
+        <!-- 知识库管理模块 -->
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-kb</artifactId>
+        </dependency>
+
+        <!-- AI 核心能力模块（RAG） -->
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-ai</artifactId>
+        </dependency>
+
+        <!-- Agent 工作流模块（任务型 Agent 引擎） -->
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-agent</artifactId>
+        </dependency>
+
+        <!-- 监控 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- Micrometer Prometheus 指标导出：暴露 /actuator/prometheus 供 Prometheus 抓取 -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
+        <!-- 接口文档 -->
+        <dependency>
+            <groupId>com.github.xiaoymin</groupId>
+            <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- 测试 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Testcontainers：集成测试容器化基础设施 -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <version>1.20.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mysql</artifactId>
+            <version>1.20.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>1.20.1</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>knowledge-admin</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
